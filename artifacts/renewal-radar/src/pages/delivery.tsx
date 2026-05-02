@@ -1,19 +1,17 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useListDeliveryHistory,
   getListDeliveryHistoryQueryKey,
 } from "@workspace/api-client-react";
 import { format } from "date-fns";
-import { Bell, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Bell, CheckCircle2, XCircle, Clock, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STATUS_STYLES: Record<string, { class: string; icon: React.ComponentType<{ className?: string }> }> = {
-  sent: { class: "bg-green-100 text-green-800 border-green-200", icon: CheckCircle },
-  failed: { class: "bg-red-100 text-red-800 border-red-200", icon: XCircle },
-  pending: { class: "bg-amber-100 text-amber-800 border-amber-200", icon: Clock },
+const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; icon: React.ComponentType<{ className?: string }> }> = {
+  sent:    { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500", icon: CheckCircle2 },
+  failed:  { bg: "bg-red-50 border-red-200",         text: "text-red-700",     dot: "bg-red-500",     icon: XCircle },
+  pending: { bg: "bg-amber-50 border-amber-200",     text: "text-amber-700",   dot: "bg-amber-400",   icon: Clock },
 };
 
 export default function DeliveryPage() {
@@ -21,76 +19,106 @@ export default function DeliveryPage() {
     { limit: 100 },
     { query: { queryKey: getListDeliveryHistoryQueryKey({ limit: 100 }) } },
   );
-
   const records = deliveryQuery.data ?? [];
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Bell className="w-5 h-5" />
+      <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center">
+              <Bell className="w-4.5 h-4.5 text-violet-600" />
+            </div>
             Delivery History
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Log of all reminder notifications sent by the system.
+          <p className="text-slate-500 text-sm mt-1.5">
+            All reminder notifications sent by the system, including email and in-app alerts.
           </p>
         </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Deliveries</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {deliveryQuery.isLoading ? (
-              <div className="p-6 space-y-3">
-                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {[
+            { label: "Total Sent", val: records.filter(r => r.status === "sent").length, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200" },
+            { label: "Failed", val: records.filter(r => r.status === "failed").length, color: "text-red-600", bg: "bg-red-50 border-red-200" },
+            { label: "Pending", val: records.filter(r => r.status === "pending").length, color: "text-amber-600", bg: "bg-amber-50 border-amber-200" },
+          ].map((s) => (
+            <div key={s.label} className={`bg-white rounded-2xl border ${s.bg.split(" ")[1]} p-4`}>
+              <p className="text-xs text-slate-500 font-medium mb-1">{s.label}</p>
+              <p className={`text-3xl font-black ${s.color}`}>{s.val}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+          {deliveryQuery.isLoading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+            </div>
+          ) : records.length === 0 ? (
+            <div className="py-20 text-center px-6">
+              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Mail className="w-7 h-7 text-slate-400" />
               </div>
-            ) : records.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                No delivery records yet. Reminders will appear here once the scheduler runs.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Obligation</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Recipient</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Channel</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</th>
-                      <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Sent At</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {records.map((r) => {
-                      const s = STATUS_STYLES[r.status] ?? STATUS_STYLES.pending;
-                      const StatusIcon = s.icon;
-                      return (
-                        <tr key={r.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-delivery-${r.id}`}>
-                          <td className="px-6 py-3.5 font-medium truncate max-w-48">
+              <p className="font-bold text-slate-700 text-lg mb-1">No deliveries yet</p>
+              <p className="text-sm text-slate-400">
+                Reminders will appear here once the scheduler runs. The processor checks every hour.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80">
+                    <th className="text-left px-6 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Obligation</th>
+                    <th className="text-left px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Recipient</th>
+                    <th className="text-left px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Channel</th>
+                    <th className="text-left px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                    <th className="text-left px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Sent At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r, idx) => {
+                    const s = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.pending;
+                    const StatusIcon = s.icon;
+                    return (
+                      <tr
+                        key={r.id}
+                        className={cn("hover:bg-slate-50/80 transition-colors", idx < records.length - 1 ? "border-b border-slate-100" : "")}
+                        data-testid={`row-delivery-${r.id}`}
+                      >
+                        <td className="px-6 py-4">
+                          <p className="font-semibold text-slate-800 text-sm truncate max-w-52">
                             {r.obligationTitle ?? `Obligation #${r.obligationId}`}
-                          </td>
-                          <td className="px-4 py-3.5 text-muted-foreground truncate max-w-40">{r.recipientEmail}</td>
-                          <td className="px-4 py-3.5 capitalize text-muted-foreground">{r.channel.replace("_", " ")}</td>
-                          <td className="px-4 py-3.5">
-                            <Badge variant="outline" className={cn("gap-1 capitalize text-xs", s.class)}>
-                              <StatusIcon className="w-3 h-3" />
-                              {r.status}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3.5 text-muted-foreground text-xs">
-                            {format(new Date(r.sentAt), "MMM d, yyyy HH:mm")}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          </p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="text-sm text-slate-500 truncate max-w-44 block">{r.recipientEmail}</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="text-sm text-slate-500 capitalize">{r.channel.replace("_", " ")}</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border", s.bg, s.text)}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full", s.dot)} />
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="text-xs text-slate-400 font-medium">
+                            {format(new Date(r.sentAt), "MMM d, yyyy · HH:mm")}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </AppLayout>
   );

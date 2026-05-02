@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,19 +24,10 @@ import {
 import { useCreateObligation, getListObligationsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useUser } from "@clerk/react";
-import { useState } from "react";
 
-const CATEGORIES = [
-  "Licensing",
-  "Insurance",
-  "Contracts",
-  "Software",
-  "HR & Compliance",
-  "Real Estate",
-  "Other",
-];
+const CATEGORIES = ["Licensing", "Insurance", "Contracts", "Software", "HR & Compliance", "Real Estate", "Other"];
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -49,8 +39,18 @@ const formSchema = z.object({
   backupOwnerEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   notes: z.string().optional(),
 });
-
 type FormValues = z.infer<typeof formSchema>;
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+      </div>
+      <div className="p-6 space-y-5">{children}</div>
+    </div>
+  );
+}
 
 export default function ObligationNewPage() {
   const [, setLocation] = useLocation();
@@ -58,7 +58,6 @@ export default function ObligationNewPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createObligation = useCreateObligation();
-  const [workspaceId] = useState<number>(1); // Will be resolved via seed
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -75,10 +74,8 @@ export default function ObligationNewPage() {
   });
 
   const onSubmit = async (values: FormValues) => {
-    // Get workspace ID from seed
     const email = user?.emailAddresses[0]?.emailAddress ?? "";
-    let wsId = workspaceId;
-
+    let wsId = 1;
     try {
       const r = await fetch("/api/me/seed", {
         method: "POST",
@@ -120,181 +117,168 @@ export default function ObligationNewPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/obligations")} data-testid="button-back">
+      <div className="p-6 lg:p-8 max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={() => setLocation("/obligations")}
+            className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-colors shadow-sm"
+            data-testid="button-back"
+          >
             <ArrowLeft className="w-4 h-4" />
-          </Button>
+          </button>
           <div>
-            <h1 className="text-2xl font-bold">New Obligation</h1>
-            <p className="text-muted-foreground text-sm">Track a new deadline or renewal</p>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">New Obligation</h1>
+            <p className="text-slate-500 text-sm mt-0.5">Track a new deadline or renewal</p>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Obligation Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Title *</FormLabel>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            <FormSection title="Core Details">
+              <FormField control={form.control} name="title" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-slate-700 font-medium">Title <span className="text-red-500">*</span></FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g. Business License Renewal"
+                      className="rounded-xl border-slate-200 focus-visible:ring-slate-300 bg-slate-50 focus:bg-white transition-colors"
+                      {...field}
+                      data-testid="input-title"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="category" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-700 font-medium">Category <span className="text-red-500">*</span></FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <Input placeholder="e.g. Business License Renewal" {...field} data-testid="input-title" />
+                        <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white" data-testid="select-category">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                      <SelectContent>
+                        {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-category">
-                              <SelectValue placeholder="Select category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {CATEGORIES.map((c) => (
-                              <SelectItem key={c} value={c}>{c}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField control={form.control} name="dueDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-700 font-medium">Due Date <span className="text-red-500">*</span></FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus-visible:ring-slate-300"
+                        {...field}
+                        data-testid="input-due-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
 
-                  <FormField
-                    control={form.control}
-                    name="dueDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Due Date *</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} data-testid="input-due-date" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+              <FormField control={form.control} name="renewalFrequency" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-slate-700 font-medium">Renewal Frequency</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50" data-testid="select-frequency">
+                        <SelectValue placeholder="None (one-time)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="once">One-time</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="annually">Annually</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-                <FormField
-                  control={form.control}
-                  name="renewalFrequency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Renewal Frequency</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-frequency">
-                            <SelectValue placeholder="None (one-time)" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="once">One-time</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="quarterly">Quarterly</SelectItem>
-                          <SelectItem value="annually">Annually</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <FormField control={form.control} name="description" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-slate-700 font-medium">Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Brief description of this obligation..."
+                      rows={2}
+                      className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus-visible:ring-slate-300 resize-none"
+                      {...field}
+                      data-testid="input-description"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </FormSection>
 
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Optional description..." rows={2} {...field} data-testid="input-description" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            <FormSection title="Ownership">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="ownerEmail" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-700 font-medium">Owner Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="owner@company.com" className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus-visible:ring-slate-300" {...field} data-testid="input-owner-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="backupOwnerEmail" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-700 font-medium">Backup Owner</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="backup@company.com" className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus-visible:ring-slate-300" {...field} data-testid="input-backup-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </FormSection>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="ownerEmail"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Owner Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="owner@company.com" {...field} data-testid="input-owner-email" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="backupOwnerEmail"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Backup Owner Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="backup@company.com" {...field} data-testid="input-backup-email" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+            <FormSection title="Notes">
+              <FormField control={form.control} name="notes" render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Textarea placeholder="Any additional context, filing instructions, or notes..." rows={3} className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus-visible:ring-slate-300 resize-none" {...field} data-testid="input-notes" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </FormSection>
 
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Any additional notes..." rows={3} {...field} data-testid="input-notes" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    type="submit"
-                    disabled={createObligation.isPending}
-                    className="flex-1"
-                    data-testid="button-submit"
-                  >
-                    {createObligation.isPending ? "Creating..." : "Create Obligation"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setLocation("/obligations")}
-                    data-testid="button-cancel"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+            <div className="flex gap-3 pt-1">
+              <Button
+                type="submit"
+                disabled={createObligation.isPending}
+                className="flex-1 bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 font-semibold shadow-sm gap-2"
+                data-testid="button-submit"
+              >
+                <Plus className="w-4 h-4" />
+                {createObligation.isPending ? "Creating..." : "Create Obligation"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation("/obligations")}
+                className="rounded-xl h-11 border-slate-200 text-slate-600"
+                data-testid="button-cancel"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
       </div>
     </AppLayout>
   );

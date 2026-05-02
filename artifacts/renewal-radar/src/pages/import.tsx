@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { useUser } from "@clerk/react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -14,21 +13,28 @@ import {
 import { usePreviewCsvImport, useImportObligationsCsv, getListObligationsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Upload, ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle, FileSpreadsheet } from "lucide-react";
 import { useLocation } from "wouter";
+import { cn } from "@/lib/utils";
 
 const OBLIGATION_FIELDS = [
-  { value: "title", label: "Title *" },
-  { value: "category", label: "Category *" },
-  { value: "dueDate", label: "Due Date *" },
-  { value: "description", label: "Description" },
-  { value: "ownerEmail", label: "Owner Email" },
-  { value: "backupOwnerEmail", label: "Backup Owner Email" },
-  { value: "notes", label: "Notes" },
-  { value: "renewalFrequency", label: "Renewal Frequency" },
+  { value: "title", label: "Title", required: true },
+  { value: "category", label: "Category", required: true },
+  { value: "dueDate", label: "Due Date", required: true },
+  { value: "description", label: "Description", required: false },
+  { value: "ownerEmail", label: "Owner Email", required: false },
+  { value: "backupOwnerEmail", label: "Backup Owner Email", required: false },
+  { value: "notes", label: "Notes", required: false },
+  { value: "renewalFrequency", label: "Renewal Frequency", required: false },
 ];
 
 type Step = "upload" | "map" | "preview" | "done";
+const STEPS: { id: Step; label: string }[] = [
+  { id: "upload", label: "Upload" },
+  { id: "map", label: "Map Columns" },
+  { id: "preview", label: "Preview" },
+  { id: "done", label: "Done" },
+];
 
 export default function ImportPage() {
   const [step, setStep] = useState<Step>("upload");
@@ -47,7 +53,6 @@ export default function ImportPage() {
   const previewMutation = usePreviewCsvImport();
   const importMutation = useImportObligationsCsv();
 
-  // Get workspace ID
   const ensureWorkspace = useCallback(async (): Promise<number> => {
     if (workspaceId) return workspaceId;
     const email = user?.emailAddresses[0]?.emailAddress ?? "";
@@ -63,27 +68,29 @@ export default function ImportPage() {
     return id;
   }, [workspaceId, user]);
 
+  const parseCsv = (text: string) => {
+    const firstLine = text.split("\n")[0];
+    if (!firstLine) return;
+    const cols = firstLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    setHeaders(cols);
+    const autoMap: Record<string, string> = {};
+    for (const col of cols) {
+      const lower = col.toLowerCase().replace(/[\s_-]/g, "");
+      for (const field of OBLIGATION_FIELDS) {
+        if (field.value.toLowerCase() === lower) autoMap[field.value] = col;
+      }
+    }
+    setColumnMapping(autoMap);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
       setCsvContent(text);
-      const firstLine = text.split("\n")[0];
-      const cols = firstLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-      setHeaders(cols);
-      // Auto-map exact matches
-      const autoMap: Record<string, string> = {};
-      for (const col of cols) {
-        const lower = col.toLowerCase().replace(/[\s_-]/g, "");
-        for (const field of OBLIGATION_FIELDS) {
-          if (field.value.toLowerCase() === lower) {
-            autoMap[field.value] = col;
-          }
-        }
-      }
-      setColumnMapping(autoMap);
+      parseCsv(text);
     };
     reader.readAsText(file);
   };
@@ -118,178 +125,179 @@ export default function ImportPage() {
     );
   };
 
+  const currentStepIdx = STEPS.findIndex((s) => s.id === step);
+
   return (
     <AppLayout>
-      <div className="p-6 max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-2">CSV Import</h1>
-        <p className="text-muted-foreground text-sm mb-6">
-          Import obligations from a spreadsheet in 4 steps.
-        </p>
+      <div className="p-6 lg:p-8 max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">CSV Import</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Import obligations from a spreadsheet in four guided steps.
+          </p>
+        </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          {(["upload", "map", "preview", "done"] as Step[]).map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                  step === s
-                    ? "bg-primary text-primary-foreground"
-                    : ["upload", "map", "preview", "done"].indexOf(step) > i
-                    ? "bg-green-500 text-white"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {["upload", "map", "preview", "done"].indexOf(step) > i ? "✓" : i + 1}
+        <div className="flex items-center gap-0 mb-8">
+          {STEPS.map((s, i) => (
+            <div key={s.id} className="flex items-center">
+              <div className="flex flex-col items-center">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all",
+                    currentStepIdx > i
+                      ? "bg-emerald-500 border-emerald-500 text-white"
+                      : currentStepIdx === i
+                      ? "bg-slate-900 border-slate-900 text-white"
+                      : "bg-white border-slate-300 text-slate-400",
+                  )}
+                >
+                  {currentStepIdx > i ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                </div>
+                <span className={cn("text-xs mt-1.5 font-medium hidden sm:block", currentStepIdx === i ? "text-slate-900" : currentStepIdx > i ? "text-emerald-600" : "text-slate-400")}>
+                  {s.label}
+                </span>
               </div>
-              <span className="text-xs font-medium capitalize hidden sm:block">{s}</span>
-              {i < 3 && <div className="w-8 h-px bg-border" />}
+              {i < STEPS.length - 1 && (
+                <div className={cn("w-20 h-0.5 mt-[-12px] mx-1", currentStepIdx > i ? "bg-emerald-400" : "bg-slate-200")} />
+              )}
             </div>
           ))}
         </div>
 
         {/* Step 1: Upload */}
         {step === "upload" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Upload className="w-4 h-4" />
-                Upload CSV
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="csv-file"
-                  data-testid="input-csv-file"
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+              <Upload className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-slate-700">Upload your CSV</h2>
+            </div>
+            <div className="p-6 space-y-5">
+              <label htmlFor="csv-file" className="cursor-pointer block">
+                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center hover:border-slate-300 hover:bg-slate-50/50 transition-all group">
+                  <div className="w-12 h-12 bg-slate-100 group-hover:bg-slate-200 rounded-xl flex items-center justify-center mx-auto mb-4 transition-colors">
+                    <FileSpreadsheet className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700 mb-1">Click to upload a CSV file</p>
+                  <p className="text-xs text-slate-400">or paste your CSV content in the field below</p>
+                </div>
+                <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" id="csv-file" data-testid="input-csv-file" />
+              </label>
+
+              <div className="relative">
+                <div className="absolute inset-x-0 top-0 flex items-center justify-center">
+                  <span className="bg-white px-3 text-xs text-slate-400 font-medium -mt-2.5">or paste CSV</span>
+                </div>
+                <Textarea
+                  placeholder="title,category,dueDate,ownerEmail&#10;Business License,Licensing,2026-06-30,owner@co.com"
+                  rows={6}
+                  value={csvContent}
+                  onChange={(e) => {
+                    setCsvContent(e.target.value);
+                    parseCsv(e.target.value);
+                  }}
+                  className="font-mono text-xs rounded-xl border-slate-200 bg-slate-50 focus:bg-white resize-none pt-4"
+                  data-testid="textarea-csv"
                 />
-                <label htmlFor="csv-file" className="cursor-pointer">
-                  <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm font-medium mb-1">Click to upload a CSV file</p>
-                  <p className="text-xs text-muted-foreground">or paste CSV content below</p>
-                </label>
               </div>
-              <Textarea
-                placeholder="Or paste CSV content here..."
-                rows={8}
-                value={csvContent}
-                onChange={(e) => {
-                  setCsvContent(e.target.value);
-                  const firstLine = e.target.value.split("\n")[0];
-                  if (firstLine) {
-                    const cols = firstLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-                    setHeaders(cols);
-                  }
-                }}
-                className="font-mono text-xs"
-                data-testid="textarea-csv"
-              />
-              <p className="text-xs text-muted-foreground">
-                Required columns: title, category, dueDate. Optional: description, ownerEmail, notes.
-              </p>
+
+              {headers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-xs text-slate-500 mr-1">Detected columns:</span>
+                  {headers.map((h) => (
+                    <span key={h} className="text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-medium">{h}</span>
+                  ))}
+                </div>
+              )}
+
               <Button
                 onClick={() => setStep("map")}
                 disabled={!csvContent.trim() || headers.length === 0}
-                className="gap-2"
+                className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2 h-11 w-full"
                 data-testid="button-next-map"
               >
                 Next: Map Columns <ArrowRight className="w-4 h-4" />
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Step 2: Map */}
         {step === "map" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Map Columns</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Match your CSV columns to obligation fields. Detected {headers.length} columns.
-              </p>
-              <div className="space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-sm font-semibold text-slate-700">Map Columns</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Match your CSV columns to obligation fields</p>
+            </div>
+            <div className="p-6">
+              <div className="space-y-3 mb-6">
                 {OBLIGATION_FIELDS.map((field) => (
-                  <div key={field.value} className="flex items-center justify-between gap-4">
-                    <span className="text-sm font-medium w-40 flex-shrink-0">{field.label}</span>
+                  <div key={field.value} className="flex items-center gap-4">
+                    <div className="w-44 flex-shrink-0 flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-700">{field.label}</span>
+                      {field.required && <span className="text-red-500 text-xs">*</span>}
+                    </div>
                     <Select
                       value={columnMapping[field.value] ?? "__none__"}
                       onValueChange={(val) =>
-                        setColumnMapping((prev) => ({
-                          ...prev,
-                          [field.value]: val === "__none__" ? "" : val,
-                        }))
+                        setColumnMapping((prev) => ({ ...prev, [field.value]: val === "__none__" ? "" : val }))
                       }
                     >
-                      <SelectTrigger className="flex-1" data-testid={`select-map-${field.value}`}>
-                        <SelectValue placeholder="-- Not mapped --" />
+                      <SelectTrigger className="flex-1 rounded-xl border-slate-200 bg-slate-50 h-9" data-testid={`select-map-${field.value}`}>
+                        <SelectValue placeholder="— Not mapped —" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">-- Not mapped --</SelectItem>
-                        {headers.map((h) => (
-                          <SelectItem key={h} value={h}>{h}</SelectItem>
-                        ))}
+                        <SelectItem value="__none__">— Not mapped —</SelectItem>
+                        {headers.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                 ))}
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep("upload")} className="gap-2" data-testid="button-back-upload">
+                <Button variant="outline" onClick={() => setStep("upload")} className="gap-2 rounded-xl border-slate-200 h-11" data-testid="button-back-upload">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
-                <Button
-                  onClick={handlePreview}
-                  disabled={previewMutation.isPending}
-                  className="gap-2"
-                  data-testid="button-preview"
-                >
-                  {previewMutation.isPending ? "Previewing..." : "Preview Import"}
-                  <ArrowRight className="w-4 h-4" />
+                <Button onClick={handlePreview} disabled={previewMutation.isPending} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2 h-11" data-testid="button-preview">
+                  {previewMutation.isPending ? "Previewing..." : <><span>Preview Import</span> <ArrowRight className="w-4 h-4" /></>}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Step 3: Preview */}
         {step === "preview" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Preview</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-sm font-semibold text-slate-700">Preview Import</h2>
+              <p className="text-xs text-slate-400 mt-0.5">First {previewRows.length} rows shown. Check for issues before confirming.</p>
+            </div>
+            <div className="p-6 space-y-4">
               {previewErrors.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-amber-800 mb-1 flex items-center gap-1">
-                    <AlertTriangle className="w-4 h-4" /> {previewErrors.length} warning(s)
-                  </p>
-                  {previewErrors.slice(0, 3).map((e, i) => (
-                    <p key={i} className="text-xs text-amber-700">{e}</p>
-                  ))}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 mb-1">{previewErrors.length} warning{previewErrors.length !== 1 ? "s" : ""} found</p>
+                    {previewErrors.slice(0, 3).map((e, i) => <p key={i} className="text-xs text-amber-700">{e}</p>)}
+                  </div>
                 </div>
               )}
-              <p className="text-sm text-muted-foreground">
-                First 10 rows (preview). Mapped fields shown below.
-              </p>
-              <div className="overflow-x-auto rounded-lg border border-border">
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-xs">
-                  <thead className="bg-muted/50">
-                    <tr>
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
                       {OBLIGATION_FIELDS.filter((f) => columnMapping[f.value]).map((f) => (
-                        <th key={f.value} className="text-left px-3 py-2 font-medium">{f.label}</th>
+                        <th key={f.value} className="text-left px-3 py-2.5 font-semibold text-slate-600">{f.label}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {previewRows.map((row, i) => (
-                      <tr key={i} className="hover:bg-muted/30">
+                      <tr key={i} className={cn("hover:bg-slate-50", i < previewRows.length - 1 ? "border-b border-slate-100" : "")}>
                         {OBLIGATION_FIELDS.filter((f) => columnMapping[f.value]).map((f) => (
-                          <td key={f.value} className="px-3 py-2 truncate max-w-32">
+                          <td key={f.value} className="px-3 py-2 text-slate-600 truncate max-w-32">
                             {row[columnMapping[f.value]] ?? row[f.value] ?? "—"}
                           </td>
                         ))}
@@ -299,54 +307,57 @@ export default function ImportPage() {
                 </table>
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep("map")} className="gap-2" data-testid="button-back-map">
+                <Button variant="outline" onClick={() => setStep("map")} className="gap-2 rounded-xl border-slate-200 h-11" data-testid="button-back-map">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </Button>
-                <Button onClick={handleImport} disabled={importMutation.isPending} className="gap-2" data-testid="button-confirm-import">
-                  {importMutation.isPending ? "Importing..." : "Confirm Import"}
-                  <ArrowRight className="w-4 h-4" />
+                <Button onClick={handleImport} disabled={importMutation.isPending} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white rounded-xl gap-2 h-11" data-testid="button-confirm-import">
+                  {importMutation.isPending ? "Importing..." : <><span>Confirm Import</span> <ArrowRight className="w-4 h-4" /></>}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {/* Step 4: Done */}
         {step === "done" && importResult && (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-xl font-bold mb-2">Import Complete</h2>
-              <div className="flex items-center justify-center gap-8 mb-6">
-                <div>
-                  <p className="text-3xl font-bold text-green-600">{importResult.imported}</p>
-                  <p className="text-sm text-muted-foreground">Imported</p>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-10 text-center">
+              <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-1">Import complete</h2>
+              <p className="text-slate-500 text-sm mb-8">Your obligations have been added to the workspace.</p>
+
+              <div className="flex items-center justify-center gap-8 mb-8">
+                <div className="text-center">
+                  <p className="text-4xl font-black text-emerald-600">{importResult.imported}</p>
+                  <p className="text-sm text-slate-500 mt-1">Imported</p>
                 </div>
-                <div>
-                  <p className="text-3xl font-bold text-amber-500">{importResult.skipped}</p>
-                  <p className="text-sm text-muted-foreground">Skipped</p>
+                <div className="w-px h-12 bg-slate-200" />
+                <div className="text-center">
+                  <p className="text-4xl font-black text-amber-500">{importResult.skipped}</p>
+                  <p className="text-sm text-slate-500 mt-1">Skipped</p>
                 </div>
               </div>
+
               {importResult.errors.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-left">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-left">
                   {importResult.errors.slice(0, 3).map((e, i) => (
                     <p key={i} className="text-xs text-amber-700">{e}</p>
                   ))}
                 </div>
               )}
+
               <div className="flex items-center justify-center gap-3">
-                <Button onClick={() => setLocation("/obligations")} data-testid="button-view-obligations">
+                <Button onClick={() => setLocation("/obligations")} className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 px-6" data-testid="button-view-obligations">
                   View Obligations
                 </Button>
                 <Button
                   variant="outline"
+                  className="rounded-xl h-11 px-6 border-slate-200"
                   onClick={() => {
-                    setCsvContent("");
-                    setHeaders([]);
-                    setColumnMapping({});
-                    setPreviewRows([]);
-                    setPreviewErrors([]);
-                    setImportResult(null);
+                    setCsvContent(""); setHeaders([]); setColumnMapping({});
+                    setPreviewRows([]); setPreviewErrors([]); setImportResult(null);
                     setStep("upload");
                   }}
                   data-testid="button-import-another"
@@ -354,8 +365,8 @@ export default function ImportPage() {
                   Import Another
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </AppLayout>
