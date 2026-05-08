@@ -5,6 +5,14 @@ import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { AuthzError, scopeDeliveryHistoryQuery } from "../lib/authz";
 import type { Request, Response } from "express";
+import {
+  HttpError,
+  obligationsTable,
+  parsePositiveInt,
+  scopeDeliveryHistoryQuery,
+  workspaceMembersTable,
+  deliveryHistoryTable,
+} from "../lib/authz";
 
 const router = Router();
 
@@ -28,10 +36,12 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
 
     const records = await db.select({ id: deliveryHistoryTable.id, obligationId: deliveryHistoryTable.obligationId, ruleId: deliveryHistoryTable.ruleId, channel: deliveryHistoryTable.channel, recipientEmail: deliveryHistoryTable.recipientEmail, status: deliveryHistoryTable.status, errorMessage: deliveryHistoryTable.errorMessage, sentAt: deliveryHistoryTable.sentAt, obligationTitle: obligationsTable.title }).from(deliveryHistoryTable).innerJoin(obligationsTable, eq(deliveryHistoryTable.obligationId, obligationsTable.id)).where(and(...filters)).orderBy(desc(deliveryHistoryTable.sentAt)).limit(limit);
     res.json(records);
+    return;
   } catch (err) {
     if (err instanceof AuthzError) return void res.status(err.status).json({ error: err.message });
     req.log.error({ err }, "listDeliveryHistory error");
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
 });
 

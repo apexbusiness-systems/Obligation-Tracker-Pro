@@ -5,6 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { AuthzError, scopeAuditLogQuery } from "../lib/authz";
 import type { Request, Response } from "express";
+import { auditLogsTable, HttpError, parsePositiveInt, scopeAuditLogQuery } from "../lib/authz";
 
 const router = Router();
 
@@ -23,10 +24,12 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
     }
     const logs = await db.select().from(auditLogsTable).where(and(...filters)).orderBy(desc(auditLogsTable.createdAt)).limit(limit);
     res.json(logs);
+    return;
   } catch (err) {
     if (err instanceof AuthzError) return void res.status(err.status).json({ error: err.message });
     req.log.error({ err }, "listAuditLogs error");
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
 });
 
