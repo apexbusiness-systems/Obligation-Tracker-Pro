@@ -7,6 +7,7 @@ import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
+import { idempotencyMiddleware } from "./middlewares/idempotency";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -135,6 +136,7 @@ app.use(
   })),
 );
 
+app.use("/api", idempotencyMiddleware);
 app.use("/api", router);
 
 export default app;
