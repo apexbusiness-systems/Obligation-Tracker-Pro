@@ -28,6 +28,7 @@ import { ArrowLeft, Plus, Loader2 } from "lucide-react";
 import { useUser } from "@clerk/react";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AiEnrichPanel, type AiEnrichResult } from "@/components/AiEnrichPanel";
 
 const CATEGORIES = ["Licensing", "Insurance", "Contracts", "Software", "HR & Compliance", "Real Estate", "Other"];
 
@@ -75,6 +76,15 @@ export default function ObligationNewPage() {
       notes: "",
     },
   });
+
+  const handleEnriched = (fields: AiEnrichResult) => {
+    if (fields.title) form.setValue("title", fields.title, { shouldValidate: true });
+    if (fields.category && CATEGORIES.includes(fields.category)) {
+      form.setValue("category", fields.category, { shouldValidate: true });
+    }
+    if (fields.notes) form.setValue("notes", fields.notes, { shouldValidate: true });
+    if (fields.ownerEmail) form.setValue("ownerEmail", fields.ownerEmail, { shouldValidate: true });
+  };
 
   const onSubmit = (values: FormValues) => {
     if (!workspaceId) {
@@ -142,6 +152,8 @@ export default function ObligationNewPage() {
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+              <AiEnrichPanel onEnriched={handleEnriched} />
+
               <FormSection title="Core Details">
                 <FormField control={form.control} name="title" render={({ field }) => (
                   <FormItem>

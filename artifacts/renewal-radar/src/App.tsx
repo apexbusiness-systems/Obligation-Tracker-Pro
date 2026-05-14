@@ -223,7 +223,7 @@ function AppRouter() {
                 <ProtectedRoute
                   component={() => (
                     <ShellLayout>
-                      <RiskIntakePage />
+                      <ObligationNewPage />
                     </ShellLayout>
                   )}
                 />
