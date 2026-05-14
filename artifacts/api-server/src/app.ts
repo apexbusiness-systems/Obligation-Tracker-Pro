@@ -69,17 +69,16 @@ app.use(
 // Clerk proxy must come before body parsers (streams raw bytes)
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-// CORS — allow the Replit proxy domains and localhost dev
-const rawDomains = process.env.REPLIT_DOMAINS ?? "";
+// CORS — localhost in dev, plus any origins listed in ALLOWED_ORIGINS (comma-separated full URLs).
+// Example: ALLOWED_ORIGINS=https://app.example.com,https://staging.example.com
+const rawOrigins = process.env.ALLOWED_ORIGINS ?? "";
 const allowedOriginStrings = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "http://localhost:23791",
-  ...rawDomains
+  ...rawOrigins
     .split(",")
-    .map((d) => d.trim())
-    .filter(Boolean)
-    .flatMap((d) => [`https://${d}`, `http://${d}`]),
+    .map((s) => s.trim())
+    .filter(Boolean),
 ];
 const allowedOrigins = new Set(allowedOriginStrings);
 
