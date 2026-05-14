@@ -394,6 +394,65 @@ describe("FlowC Integration", () => {
     await expect(processOutbox()).resolves.toBeUndefined();
   });
 
+  it("dead-letter: row status becomes 'dead_letter' after max attempts exhausted", async () => {
+    process.env.FLOWC_CALLBACK_URL = "http://localhost:1";
+    process.env.FLOWC_CALLBACK_SECRET = "dl-secret";
+
+    const key = crypto.randomUUID();
+    const body = JSON.stringify({
+      event_type: "compliance.violation",
+      object_id: `obj-dl-${crypto.randomUUID()}`,
+      severity: "critical",
+      review_required: true,
+      review_code: "DL-001",
+      summary: "Dead-letter exhaustion test",
+      evidence: {},
+    });
+    const res = await post(body, headers(body, { "x-idempotency-key": key }));
+    expect(res.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    const [receipt] = await db
+      .select()
+      .from(integrationReceiptsTable)
+      .where(eq(integrationReceiptsTable.idempotencyKey, key))
+      .limit(1);
+
+    const outboxRows = await db
+      .select()
+      .from(integrationOutboxTable)
+      .where(eq(integrationOutboxTable.receiptId, receipt.id));
+
+    expect(outboxRows.length).toBeGreaterThan(0);
+    const outboxRow = outboxRows[0];
+
+    // Set attempt_count to 4 so the next processOutbox run increments to 5 = MAX_ATTEMPTS
+    await db
+      .update(integrationOutboxTable)
+      .set({
+        attemptCount: 4,
+        nextAttemptAt: new Date(Date.now() - 1000),
+        status: "pending",
+      })
+      .where(eq(integrationOutboxTable.id, outboxRow.id));
+
+    const { processOutbox } = await import("../lib/integrations/flowc/outbox");
+    await processOutbox();
+
+    const [updated] = await db
+      .select()
+      .from(integrationOutboxTable)
+      .where(eq(integrationOutboxTable.id, outboxRow.id))
+      .limit(1);
+
+    expect(updated.status).toBe("dead_letter");
+    expect(updated.attemptCount).toBeGreaterThanOrEqual(5);
+
+    delete process.env.FLOWC_CALLBACK_URL;
+    delete process.env.FLOWC_CALLBACK_SECRET;
+  });
+
   it("raw-body capture preserves signature validity for multibyte payloads", async () => {
     const body = JSON.stringify({
       event_type: "test.multibyte",

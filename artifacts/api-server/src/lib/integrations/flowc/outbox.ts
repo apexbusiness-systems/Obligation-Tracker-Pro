@@ -1,3 +1,4 @@
+import nodemailer from "nodemailer";
 import { db } from "@workspace/db";
 import { integrationOutboxTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -7,6 +8,60 @@ import type { CallbackPayload } from "./callback";
 
 const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 10;
+
+type DeadLetterRow = {
+  id: number;
+  receiptId: number;
+  targetKind: string;
+  targetUrl: string | null;
+  eventName: string | null;
+  payload: unknown;
+  attemptCount: number;
+};
+
+async function notifyDeadLetter(row: DeadLetterRow): Promise<void> {
+  logger.error(
+    { outboxId: row.id, receiptId: row.receiptId, targetKind: row.targetKind },
+    "flowc.outbox.dead_letter",
+  );
+
+  const slackUrl = process.env.SLACK_WEBHOOK_URL;
+  if (slackUrl) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 5000);
+    fetch(slackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: `⚠️ FlowC dead-letter: outbox row ${row.id} for receipt ${row.receiptId} failed after 5 attempts. targetKind: ${row.targetKind}`,
+      }),
+      signal: ac.signal,
+    })
+      .catch(() => {})
+      .finally(() => clearTimeout(timer));
+  }
+
+  const smtpHost = process.env.SMTP_HOST;
+  if (smtpHost) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: Number(process.env.SMTP_PORT ?? 587),
+        auth: process.env.SMTP_USER
+          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? "" }
+          : undefined,
+      });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM,
+        to: process.env.SMTP_FROM,
+        subject: `DueRadar: FlowC outbox dead-letter — row ${row.id}`,
+        text: JSON.stringify(row, null, 2),
+      });
+    } catch {
+      // swallow
+    }
+  }
+}
 
 function backoffSeconds(attemptCount: number): number {
   // Exponential backoff: 30, 60, 120, 240, capped at 300 seconds
@@ -71,10 +126,15 @@ export async function processOutbox(): Promise<void> {
                 last_error = ${error ?? "unknown"}, updated_at = NOW()
             WHERE id = ${row.id}
           `);
-          logger.warn(
-            { outboxId: row.id, error },
-            "flowc.outbox.dead_letter",
-          );
+          void notifyDeadLetter({
+            id: row.id,
+            receiptId: row.receipt_id,
+            targetKind: row.target_kind,
+            targetUrl: row.target_url,
+            eventName: row.event_name,
+            payload: row.payload,
+            attemptCount: newAttemptCount,
+          });
         } else {
           const nextSecs = backoffSeconds(newAttemptCount);
           await tx.execute(sql`
