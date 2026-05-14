@@ -44,35 +44,64 @@ Your business deadline warning system. DueRadar tracks contracts, permits, insur
 
 ## Required Environment Variables
 
-### Auto-provisioned by Replit
+Copy `.env.example` to `.env` and fill in the values. The API server runs on Fly.io (`dueradar-api.fly.dev`); the frontend is deployed to Cloudflare Pages at `dueradar.icu` via `wrangler.jsonc`.
+
+### Required — API server (Fly.io)
 
 | Variable | Description |
 |---|---|
+| `PORT` | API server listen port (default `3001`) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `CLERK_SECRET_KEY` | Clerk server secret key |
 | `CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (frontend) |
-| `PORT` | Frontend dev server port |
-| `BASE_PATH` | Vite base path |
 
-### Deployment (Cloudflare Pages)
+### Required — Frontend build (Cloudflare Pages)
 
 | Variable | Description |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
-| `CLOUDFLARE_ZONE_ID` | Cloudflare zone ID for dueradar.icu |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key exposed to the browser bundle |
 
-### Optional — Email Reminders
+### CORS — production
 
-| Variable | Description | Example |
+| Variable | Description |
+|---|---|
+| `ALLOWED_ORIGINS` | Comma-separated origins the API allows (e.g. `https://dueradar.icu,https://www.dueradar.icu`) |
+
+### FlowC integration
+
+| Variable | Description |
+|---|---|
+| `FLOWC_WEBHOOK_SECRET` | Shared secret for verifying inbound FlowC webhook signatures |
+| `FLOWC_WORKSPACE_ID` | Workspace slug or UUID that FlowC signals are assigned to |
+| `FLOWC_CALLBACK_URL` | Optional outbound callback URL after each signal is processed |
+| `FLOWC_CALLBACK_SECRET` | Optional secret for signing outbound callbacks |
+
+### Optional — Email reminders
+
+| Variable | Description | Default |
 |---|---|---|
+| `ENABLE_REMINDER_SCHEDULER` | Enable hourly reminder cron | `false` |
 | `SMTP_HOST` | SMTP server hostname | `smtp.sendgrid.net` |
 | `SMTP_PORT` | SMTP port | `587` |
 | `SMTP_SECURE` | Use TLS | `false` |
 | `SMTP_USER` | SMTP username | `apikey` |
-| `SMTP_PASS` | SMTP password/API key | `SG.xxxxx` |
+| `SMTP_PASS` | SMTP password / API key | — |
 | `SMTP_FROM` | Sender address | `noreply@dueradar.icu` |
+
+### Optional — Observability
+
+| Variable | Description |
+|---|---|
+| `SENTRY_DSN` | Sentry DSN for API server error tracking |
+| `VITE_SENTRY_DSN` | Sentry DSN for frontend error tracking |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook for alert notifications |
+
+### Optional — Groq AI enrichment
+
+| Variable | Description | Default |
+|---|---|---|
+| `ENABLE_GROQ_AI` | Enable AI-assisted obligation enrichment | `false` |
+| `GROQ_API_KEY` | Groq API key | — |
 
 ## Architecture
 
